@@ -48,7 +48,7 @@ class ChangedFile(StrictModel):
     old_path: str | None = None
     new_path: str | None = None
     change_type: ChangeType
-    patch_status: PatchStatus = PatchStatus.CO_PATCH
+    patch_status: PatchStatus = PatchStatus.HAS_PATCH
     language: str = "Python"
     old_line_count: Annotated[int, Field(ge=0)] = 0
     new_line_count: Annotated[int, Field(ge=0)] = 0
@@ -63,14 +63,14 @@ class ChangedFile(StrictModel):
 
     @model_validator(mode="after")
     def validate_paths(self) -> ChangedFile:
-        if self.change_type == ChangeType.THEM_MOI:
+        if self.change_type == ChangeType.ADDED:
             if self.old_path is not None or not self.new_path:
-                raise ValueError("THEM_MOI requires old_path=None and non-empty new_path")
-        elif self.change_type == ChangeType.XOA:
+                raise ValueError("ADDED requires old_path=None and non-empty new_path")
+        elif self.change_type == ChangeType.DELETED:
             if not self.old_path or self.new_path is not None:
-                raise ValueError("XOA requires non-empty old_path and new_path=None")
+                raise ValueError("DELETED requires non-empty old_path and new_path=None")
         elif not self.old_path or not self.new_path:
-            raise ValueError("CHINH_SUA/DOI_TEN requires both old_path and new_path")
+            raise ValueError("MODIFIED/RENAMED requires both old_path and new_path")
         return self
 
 
@@ -127,7 +127,7 @@ class ModelInvocationRecord(StrictModel):
     call_status: CallStatus
     input_tokens: Annotated[int, Field(ge=0)] | None = None
     output_tokens: Annotated[int, Field(ge=0)] | None = None
-    usage_source: UsageSource = UsageSource.KHONG_CO
+    usage_source: UsageSource = UsageSource.NONE
     estimated_cost_usd: Annotated[float, Field(ge=0.0)] | None = None
     latency_ms: Annotated[int, Field(ge=0)] | None = None
     started_at: datetime
@@ -136,11 +136,11 @@ class ModelInvocationRecord(StrictModel):
 
     @model_validator(mode="after")
     def validate_usage(self) -> ModelInvocationRecord:
-        if self.usage_source == UsageSource.KHONG_CO:
+        if self.usage_source == UsageSource.NONE:
             if self.input_tokens is not None or self.output_tokens is not None:
-                raise ValueError("KHONG_CO requires input_tokens=None and output_tokens=None")
+                raise ValueError("NONE requires input_tokens=None and output_tokens=None")
         elif self.input_tokens is None or self.output_tokens is None:
-            raise ValueError("THUC_TE/UOC_TINH requires both input_tokens and output_tokens")
+            raise ValueError("ACTUAL/ESTIMATED requires both input_tokens and output_tokens")
         return self
 
 
@@ -151,7 +151,7 @@ class FindingCandidate(StrictModel):
     start_line: Annotated[int, Field(gt=0)]
     end_line: Annotated[int, Field(gt=0)]
     category: Category
-    finding_kind: FindingKind = FindingKind.LOI_TIEM_AN
+    finding_kind: FindingKind = FindingKind.DEFECT
     severity: Severity
     title: str
     raw_message: str
@@ -159,7 +159,7 @@ class FindingCandidate(StrictModel):
     suggested_fix: str | None = None
     rule_code: str | None = None
     invocation_attempt: Annotated[int, Field(gt=0)] | None = None
-    filter_status: FilterStatus = FilterStatus.GIU_LAI
+    filter_status: FilterStatus = FilterStatus.KEPT
     filter_reason: str | None = None
     merged_fingerprint: str | None = None
 
@@ -191,7 +191,7 @@ class ReviewFinding(StrictModel):
     explanation: str
     code_evidence: str
     suggested_fix: str | None = None
-    fix_verification_status: FixVerificationStatus = FixVerificationStatus.CHUA_KIEM_CHUNG
+    fix_verification_status: FixVerificationStatus = FixVerificationStatus.UNVERIFIED
     sources: list[SourceType] = Field(min_length=1)
 
     @model_validator(mode="after")
@@ -241,7 +241,7 @@ class FindingFeedback(StrictModel):
 
     @model_validator(mode="after")
     def validate_reason(self) -> FindingFeedback:
-        if self.feedback_label == FeedbackLabel.SAI:
+        if self.feedback_label == FeedbackLabel.INVALID:
             if not self.reason_note or not self.reason_note.strip():
-                raise ValueError("reason_note is required when feedback_label is SAI")
+                raise ValueError("reason_note is required when feedback_label is INVALID")
         return self
