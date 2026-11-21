@@ -5,19 +5,19 @@ CREATE TABLE IF NOT EXISTS UserAccount (
     username      VARCHAR(100) NOT NULL UNIQUE,
     full_name     VARCHAR(150) NOT NULL,
     email         VARCHAR(150) NULL UNIQUE,
-    account_type  VARCHAR(30)  NOT NULL CHECK (account_type IN ('CA_NHAN', 'DICH_VU_CI')),
-    status        VARCHAR(30)  NOT NULL CHECK (status IN ('HOAT_DONG', 'TAM_KHOA')),
+    account_type  VARCHAR(30)  NOT NULL CHECK (account_type IN ('PERSONAL', 'CI_SERVICE')),
+    status        VARCHAR(30)  NOT NULL CHECK (status IN ('ACTIVE', 'SUSPENDED')),
     created_at    DATETIME     NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS Repository (
     repo_id          INTEGER PRIMARY KEY AUTOINCREMENT,
     repo_full_name   VARCHAR(200) NOT NULL UNIQUE,
-    platform         VARCHAR(30)  NOT NULL CHECK (platform IN ('GITHUB', 'CUC_BO')),
+    platform         VARCHAR(30)  NOT NULL CHECK (platform IN ('GITHUB', 'LOCAL')),
     repo_url         VARCHAR(500) NULL,
     default_branch   VARCHAR(100) NOT NULL,
     primary_language VARCHAR(50)  NOT NULL,
-    status           VARCHAR(30)  NOT NULL CHECK (status IN ('DANG_HOAT_DONG', 'NGUNG_THEO_DOI')),
+    status           VARCHAR(30)  NOT NULL CHECK (status IN ('ACTIVE', 'ARCHIVED')),
     created_at       DATETIME     NOT NULL
 );
 
@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS RepositoryMember (
     member_id  INTEGER PRIMARY KEY AUTOINCREMENT,
     repo_id    INTEGER     NOT NULL REFERENCES Repository(repo_id) ON DELETE CASCADE,
     user_id    INTEGER     NOT NULL REFERENCES UserAccount(user_id) ON DELETE CASCADE,
-    role_name  VARCHAR(30) NOT NULL CHECK (role_name IN ('LAP_TRINH_VIEN', 'NGUOI_REVIEW', 'QUAN_LY_DU_AN', 'NGUOI_DANH_GIA')),
+    role_name  VARCHAR(30) NOT NULL CHECK (role_name IN ('DEVELOPER', 'REVIEWER', 'PROJECT_MANAGER', 'EVALUATOR')),
     granted_at DATETIME    NOT NULL,
     UNIQUE (repo_id, user_id, role_name)
 );
@@ -40,7 +40,7 @@ CREATE TABLE IF NOT EXISTS PullRequest (
     source_branch    VARCHAR(120) NOT NULL,
     target_branch    VARCHAR(120) NOT NULL,
     current_head_sha VARCHAR(64)  NOT NULL,
-    pr_status        VARCHAR(30)  NOT NULL CHECK (pr_status IN ('DANG_MO', 'DA_DONG', 'DA_HOP_NHAT')),
+    pr_status        VARCHAR(30)  NOT NULL CHECK (pr_status IN ('OPEN', 'CLOSED', 'MERGED')),
     synced_at        DATETIME     NOT NULL,
     UNIQUE (repo_id, pr_number),
     UNIQUE (repo_id, pr_id)
@@ -52,7 +52,7 @@ CREATE TABLE IF NOT EXISTS WebhookEvent (
     pr_id          INTEGER      NULL,
     delivery_uuid  VARCHAR(128) NOT NULL UNIQUE,
     event_type     VARCHAR(80)  NOT NULL,
-    process_status VARCHAR(30)  NOT NULL CHECK (process_status IN ('TIEP_NHAN', 'DA_TAO_LUOT', 'BO_QUA', 'LOI')),
+    process_status VARCHAR(30)  NOT NULL CHECK (process_status IN ('RECEIVED', 'RUN_CREATED', 'IGNORED', 'ERROR')),
     status_note    VARCHAR(500) NULL,
     received_at    DATETIME     NOT NULL,
     FOREIGN KEY (repo_id, pr_id) REFERENCES PullRequest(repo_id, pr_id) ON DELETE RESTRICT
@@ -62,7 +62,7 @@ CREATE TABLE IF NOT EXISTS CodeSnapshot (
     snapshot_id     INTEGER PRIMARY KEY AUTOINCREMENT,
     repo_id         INTEGER     NOT NULL REFERENCES Repository(repo_id) ON DELETE RESTRICT,
     pr_id           INTEGER     NULL,
-    input_source    VARCHAR(30) NOT NULL CHECK (input_source IN ('GITHUB_PR', 'CLI_CUC_BO', 'IDE_PLUGIN')),
+    input_source    VARCHAR(30) NOT NULL CHECK (input_source IN ('GITHUB_PR', 'LOCAL_CLI', 'IDE_PLUGIN')),
     base_commit_sha VARCHAR(64) NOT NULL,
     head_commit_sha VARCHAR(64) NOT NULL,
     merge_base_sha  VARCHAR(64) NOT NULL,
@@ -80,8 +80,8 @@ CREATE TABLE IF NOT EXISTS ChangedFile (
     snapshot_id     INTEGER      NOT NULL REFERENCES CodeSnapshot(snapshot_id) ON DELETE CASCADE,
     old_path        VARCHAR(500) NULL,
     new_path        VARCHAR(500) NULL,
-    change_type     VARCHAR(20)  NOT NULL CHECK (change_type IN ('THEM_MOI', 'CHINH_SUA', 'XOA', 'DOI_TEN')),
-    patch_status    VARCHAR(30)  NOT NULL DEFAULT 'CO_PATCH' CHECK (patch_status IN ('CO_PATCH', 'THIEU_PATCH', 'NHI_PHAN', 'NGOAI_PHAM_VI')),
+    change_type     VARCHAR(20)  NOT NULL CHECK (change_type IN ('ADDED', 'MODIFIED', 'DELETED', 'RENAMED')),
+    patch_status    VARCHAR(30)  NOT NULL DEFAULT 'HAS_PATCH' CHECK (patch_status IN ('HAS_PATCH', 'MISSING_PATCH', 'BINARY', 'OUT_OF_SCOPE')),
     language        VARCHAR(50)  NOT NULL,
     old_line_count  INTEGER      NOT NULL CHECK (old_line_count >= 0),
     new_line_count  INTEGER      NOT NULL CHECK (new_line_count >= 0),
@@ -90,9 +90,9 @@ CREATE TABLE IF NOT EXISTS ChangedFile (
     is_supported    BOOLEAN      NOT NULL CHECK (is_supported IN (0, 1)),
     UNIQUE (snapshot_id, file_id),
     CHECK (
-        (change_type = 'THEM_MOI' AND old_path IS NULL AND new_path IS NOT NULL) OR
-        (change_type = 'XOA' AND old_path IS NOT NULL AND new_path IS NULL) OR
-        (change_type IN ('CHINH_SUA', 'DOI_TEN') AND old_path IS NOT NULL AND new_path IS NOT NULL)
+        (change_type = 'ADDED' AND old_path IS NULL AND new_path IS NOT NULL) OR
+        (change_type = 'DELETED' AND old_path IS NOT NULL AND new_path IS NULL) OR
+        (change_type IN ('MODIFIED', 'RENAMED') AND old_path IS NOT NULL AND new_path IS NOT NULL)
     )
 );
 
@@ -131,8 +131,8 @@ CREATE TABLE IF NOT EXISTS AnalysisRule (
     tool_source        VARCHAR(30)  NOT NULL CHECK (tool_source IN ('RUFF', 'BANDIT', 'AST_CUSTOM', 'CONVENTION')),
     rule_code          VARCHAR(60)  NOT NULL,
     rule_name          VARCHAR(200) NOT NULL,
-    category           VARCHAR(40)  NOT NULL CHECK (category IN ('CHUC_NANG', 'BAO_MAT', 'HIEU_NANG', 'BAO_TRI', 'QUY_UOC')),
-    default_severity   VARCHAR(20)  NOT NULL CHECK (default_severity IN ('CAO', 'TRUNG_BINH', 'THAP')),
+    category           VARCHAR(40)  NOT NULL CHECK (category IN ('FUNCTIONAL', 'SECURITY', 'PERFORMANCE', 'MAINTAINABILITY', 'CONVENTION')),
+    default_severity   VARCHAR(20)  NOT NULL CHECK (default_severity IN ('HIGH', 'MEDIUM', 'LOW')),
     rule_description   TEXT         NULL,
     enabled_by_default BOOLEAN      NOT NULL CHECK (enabled_by_default IN (0, 1)),
     UNIQUE (tool_source, rule_code)
@@ -164,7 +164,7 @@ CREATE TABLE IF NOT EXISTS ConfigRule (
     config_id         INTEGER     NOT NULL REFERENCES ReviewConfig(config_id) ON DELETE CASCADE,
     rule_id           INTEGER     NOT NULL REFERENCES AnalysisRule(rule_id) ON DELETE RESTRICT,
     is_enabled        BOOLEAN     NOT NULL DEFAULT 1 CHECK (is_enabled IN (0, 1)),
-    severity_override VARCHAR(20) NULL CHECK (severity_override IS NULL OR severity_override IN ('CAO', 'TRUNG_BINH', 'THAP')),
+    severity_override VARCHAR(20) NULL CHECK (severity_override IS NULL OR severity_override IN ('HIGH', 'MEDIUM', 'LOW')),
     PRIMARY KEY (config_id, rule_id)
 );
 
@@ -175,9 +175,9 @@ CREATE TABLE IF NOT EXISTS ReviewRun (
     requested_by            INTEGER      NULL REFERENCES UserAccount(user_id) ON DELETE SET NULL,
     event_id                INTEGER      NULL UNIQUE REFERENCES WebhookEvent(event_id) ON DELETE SET NULL,
     idempotency_key         VARCHAR(128) NOT NULL UNIQUE,
-    execution_mode          VARCHAR(30)  NOT NULL CHECK (execution_mode IN ('A_STATIC', 'B_LLM', 'C_NOI_KET_QUA', 'D_KET_HOP')),
-    context_policy          VARCHAR(30)  NOT NULL DEFAULT 'DIFF_AST_INTENT' CHECK (context_policy IN ('DIFF_ONLY', 'DIFF_AST', 'DIFF_AST_INTENT', 'KHONG_AP_DUNG')),
-    run_status              VARCHAR(30)  NOT NULL CHECK (run_status IN ('CHO_XU_LY', 'DANG_CHAY', 'HOAN_THANH', 'MOT_PHAN', 'THAT_BAI')),
+    execution_mode          VARCHAR(30)  NOT NULL CHECK (execution_mode IN ('A_STATIC', 'B_LLM', 'C_CONCAT', 'D_HYBRID')),
+    context_policy          VARCHAR(30)  NOT NULL DEFAULT 'DIFF_AST_INTENT' CHECK (context_policy IN ('DIFF_ONLY', 'DIFF_AST', 'DIFF_AST_INTENT', 'NOT_APPLICABLE')),
+    run_status              VARCHAR(30)  NOT NULL CHECK (run_status IN ('PENDING', 'RUNNING', 'COMPLETED', 'PARTIAL', 'FAILED')),
     is_full_coverage        BOOLEAN      NOT NULL CHECK (is_full_coverage IN (0, 1)),
     termination_reason      VARCHAR(500) NULL,
     benchmark_sample_id     VARCHAR(100) NULL,
@@ -194,31 +194,31 @@ CREATE TABLE IF NOT EXISTS ModelInvocation (
     run_id              INTEGER       NOT NULL REFERENCES ReviewRun(run_id) ON DELETE CASCADE,
     hunk_id             INTEGER       NULL REFERENCES DiffHunk(hunk_id) ON DELETE SET NULL,
     attempt_number      INTEGER       NOT NULL CHECK (attempt_number > 0),
-    call_purpose        VARCHAR(30)   NOT NULL DEFAULT 'REVIEW' CHECK (call_purpose IN ('REVIEW', 'XAC_MINH', 'THU_LAI')),
+    call_purpose        VARCHAR(30)   NOT NULL DEFAULT 'REVIEW' CHECK (call_purpose IN ('REVIEW', 'VERIFY', 'RETRY')),
     provider_name       VARCHAR(60)   NOT NULL,
     resolved_model_name VARCHAR(100)  NOT NULL,
     payload_hash        VARCHAR(64)   NOT NULL,
-    call_status         VARCHAR(30)   NOT NULL CHECK (call_status IN ('THANH_CONG', 'QUA_HAN', 'LOI_DICH_VU', 'SAI_SCHEMA')),
+    call_status         VARCHAR(30)   NOT NULL CHECK (call_status IN ('SUCCESS', 'TIMEOUT', 'PROVIDER_ERROR', 'SCHEMA_ERROR')),
     input_tokens        INTEGER       NULL CHECK (input_tokens IS NULL OR input_tokens >= 0),
     output_tokens       INTEGER       NULL CHECK (output_tokens IS NULL OR output_tokens >= 0),
-    usage_source        VARCHAR(20)   NOT NULL CHECK (usage_source IN ('THUC_TE', 'UOC_TINH', 'KHONG_CO')),
+    usage_source        VARCHAR(20)   NOT NULL CHECK (usage_source IN ('ACTUAL', 'ESTIMATED', 'NONE')),
     estimated_cost_usd  DECIMAL(10,6) NULL CHECK (estimated_cost_usd IS NULL OR estimated_cost_usd >= 0),
     latency_ms          INTEGER       NULL CHECK (latency_ms IS NULL OR latency_ms >= 0),
     started_at          DATETIME      NOT NULL,
     finished_at         DATETIME      NULL,
     UNIQUE (run_id, attempt_number),
     CHECK (
-        (usage_source = 'KHONG_CO' AND input_tokens IS NULL AND output_tokens IS NULL) OR
-        (usage_source <> 'KHONG_CO' AND input_tokens IS NOT NULL AND output_tokens IS NOT NULL)
+        (usage_source = 'NONE' AND input_tokens IS NULL AND output_tokens IS NULL) OR
+        (usage_source <> 'NONE' AND input_tokens IS NOT NULL AND output_tokens IS NOT NULL)
     )
 );
 
 CREATE TABLE IF NOT EXISTS QualityAssessment (
     assessment_id     INTEGER PRIMARY KEY AUTOINCREMENT,
     run_id            INTEGER     NOT NULL REFERENCES ReviewRun(run_id) ON DELETE CASCADE,
-    dimension_name    VARCHAR(40) NOT NULL CHECK (dimension_name IN ('CHUC_NANG', 'BAO_MAT', 'HIEU_NANG', 'BAO_TRI', 'QUY_UOC')),
+    dimension_name    VARCHAR(40) NOT NULL CHECK (dimension_name IN ('FUNCTIONAL', 'SECURITY', 'PERFORMANCE', 'MAINTAINABILITY', 'CONVENTION')),
     rubric_version    VARCHAR(30) NOT NULL,
-    assessment_status VARCHAR(40) NOT NULL CHECK (assessment_status IN ('CO_VAN_DE', 'CAN_XAC_MINH', 'KHONG_QUAN_SAT_THAY', 'CHUA_DU_THONG_TIN', 'KHONG_AP_DUNG')),
+    assessment_status VARCHAR(40) NOT NULL CHECK (assessment_status IN ('ISSUES_FOUND', 'NEEDS_VERIFICATION', 'NO_ISSUES_OBSERVED', 'INSUFFICIENT_INFO', 'NOT_APPLICABLE')),
     is_scope_complete BOOLEAN     NOT NULL CHECK (is_scope_complete IN (0, 1)),
     summary_rationale TEXT        NOT NULL,
     UNIQUE (run_id, dimension_name)
@@ -234,15 +234,15 @@ CREATE TABLE IF NOT EXISTS ReviewFinding (
     diff_side               VARCHAR(10)  NOT NULL CHECK (diff_side IN ('LEFT', 'RIGHT')),
     start_line              INTEGER      NOT NULL CHECK (start_line > 0),
     end_line                INTEGER      NOT NULL CHECK (end_line >= start_line),
-    category                VARCHAR(40)  NOT NULL CHECK (category IN ('CHUC_NANG', 'BAO_MAT', 'HIEU_NANG', 'BAO_TRI', 'QUY_UOC')),
-    finding_kind            VARCHAR(30)  NOT NULL CHECK (finding_kind IN ('LOI_TIEM_AN', 'GOI_Y_TOI_UU')),
-    severity                VARCHAR(20)  NOT NULL CHECK (severity IN ('CAO', 'TRUNG_BINH', 'THAP')),
-    evidence_status         VARCHAR(30)  NOT NULL CHECK (evidence_status IN ('CO_CAN_CU', 'CAN_XAC_MINH')),
+    category                VARCHAR(40)  NOT NULL CHECK (category IN ('FUNCTIONAL', 'SECURITY', 'PERFORMANCE', 'MAINTAINABILITY', 'CONVENTION')),
+    finding_kind            VARCHAR(30)  NOT NULL CHECK (finding_kind IN ('DEFECT', 'SUGGESTION')),
+    severity                VARCHAR(20)  NOT NULL CHECK (severity IN ('HIGH', 'MEDIUM', 'LOW')),
+    evidence_status         VARCHAR(30)  NOT NULL CHECK (evidence_status IN ('GROUNDED', 'NEEDS_VERIFICATION')),
     title                   VARCHAR(300) NOT NULL,
     explanation             TEXT         NOT NULL,
     code_evidence           TEXT         NOT NULL,
     suggested_fix           TEXT         NULL,
-    fix_verification_status VARCHAR(30)  NOT NULL CHECK (fix_verification_status IN ('CHUA_KIEM_CHUNG', 'DA_KIEM_CHUNG', 'KHONG_AP_DUNG')),
+    fix_verification_status VARCHAR(30)  NOT NULL CHECK (fix_verification_status IN ('UNVERIFIED', 'VERIFIED', 'NOT_APPLICABLE')),
     UNIQUE (run_id, issue_fingerprint),
     UNIQUE (run_id, finding_id),
     FOREIGN KEY (run_id, snapshot_id) REFERENCES ReviewRun(run_id, snapshot_id) ON DELETE CASCADE,
@@ -263,7 +263,7 @@ CREATE TABLE IF NOT EXISTS FindingCandidate (
     start_line    INTEGER      NOT NULL CHECK (start_line > 0),
     end_line      INTEGER      NOT NULL CHECK (end_line >= start_line),
     raw_message   TEXT         NOT NULL,
-    filter_status VARCHAR(30)  NOT NULL CHECK (filter_status IN ('GIU_LAI', 'LOAI_SAI_DONG', 'LOAI_TRUNG', 'LOAI_THIEU_CAN_CU', 'LOI_CU')),
+    filter_status VARCHAR(30)  NOT NULL CHECK (filter_status IN ('KEPT', 'DROPPED_INVALID_LINE', 'DROPPED_DUPLICATE', 'DROPPED_UNGROUNDED', 'PRE_EXISTING')),
     filter_reason VARCHAR(500) NULL,
     CHECK (
         (source_type = 'LLM' AND invocation_id IS NOT NULL AND rule_id IS NULL) OR
@@ -276,29 +276,29 @@ CREATE TABLE IF NOT EXISTS FindingFeedback (
     finding_id     INTEGER     NOT NULL REFERENCES ReviewFinding(finding_id) ON DELETE CASCADE,
     user_id        INTEGER     NOT NULL REFERENCES UserAccount(user_id) ON DELETE RESTRICT,
     revision_no    INTEGER     NOT NULL CHECK (revision_no > 0),
-    feedback_label VARCHAR(30) NOT NULL CHECK (feedback_label IN ('DUNG', 'SAI', 'CAN_XAC_MINH')),
+    feedback_label VARCHAR(30) NOT NULL CHECK (feedback_label IN ('VALID', 'INVALID', 'NEEDS_VERIFICATION')),
     reason_note    TEXT        NULL,
     created_at     DATETIME    NOT NULL,
     UNIQUE (finding_id, user_id, revision_no),
-    CHECK (feedback_label <> 'SAI' OR (reason_note IS NOT NULL AND LENGTH(TRIM(reason_note)) > 0))
+    CHECK (feedback_label <> 'INVALID' OR (reason_note IS NOT NULL AND LENGTH(TRIM(reason_note)) > 0))
 );
 
 CREATE TABLE IF NOT EXISTS PublicationRecord (
     publication_id      INTEGER PRIMARY KEY AUTOINCREMENT,
     run_id              INTEGER      NOT NULL REFERENCES ReviewRun(run_id) ON DELETE CASCADE,
     finding_id          INTEGER      NULL,
-    comment_scope       VARCHAR(30)  NOT NULL CHECK (comment_scope IN ('TONG_HOP_PR', 'NHAN_XET_DONG')),
+    comment_scope       VARCHAR(30)  NOT NULL CHECK (comment_scope IN ('PR_SUMMARY', 'INLINE_COMMENT')),
     marker_key          VARCHAR(128) NOT NULL,
     target_commit_sha   VARCHAR(64)  NOT NULL,
-    publish_status      VARCHAR(30)  NOT NULL CHECK (publish_status IN ('CHO_DANG', 'DA_DANG', 'BO_QUA_LOI_THOI', 'LOI_DANG', 'CAN_DOI_SOAT')),
+    publish_status      VARCHAR(30)  NOT NULL CHECK (publish_status IN ('PENDING', 'PUBLISHED', 'SKIPPED_STALE', 'FAILED', 'NEEDS_RECONCILIATION')),
     external_comment_id VARCHAR(100) NULL,
     retry_count         INTEGER      NOT NULL CHECK (retry_count >= 0),
     status_detail       VARCHAR(500) NULL,
     updated_at          DATETIME     NOT NULL,
     FOREIGN KEY (run_id, finding_id) REFERENCES ReviewFinding(run_id, finding_id) ON DELETE CASCADE,
     CHECK (
-        (comment_scope = 'TONG_HOP_PR' AND finding_id IS NULL) OR
-        (comment_scope = 'NHAN_XET_DONG' AND finding_id IS NOT NULL)
+        (comment_scope = 'PR_SUMMARY' AND finding_id IS NULL) OR
+        (comment_scope = 'INLINE_COMMENT' AND finding_id IS NOT NULL)
     )
 );
 
@@ -313,10 +313,10 @@ CREATE TABLE IF NOT EXISTS StorageArtifact (
     storage_uri    VARCHAR(500) NOT NULL,
     content_sha256 VARCHAR(64)  NOT NULL,
     size_bytes     INTEGER      NOT NULL CHECK (size_bytes >= 0),
-    purge_status   VARCHAR(20)  NOT NULL DEFAULT 'CON_LUU' CHECK (purge_status IN ('CON_LUU', 'DA_XOA', 'LOI_XOA')),
+    purge_status   VARCHAR(20)  NOT NULL DEFAULT 'STORED' CHECK (purge_status IN ('STORED', 'PURGED', 'DELETE_FAILED')),
     expires_at     DATETIME     NOT NULL,
     purged_at      DATETIME     NULL,
     created_at     DATETIME     NOT NULL,
     CHECK (snapshot_id IS NOT NULL OR run_id IS NOT NULL),
-    CHECK (purge_status <> 'DA_XOA' OR purged_at IS NOT NULL)
+    CHECK (purge_status <> 'PURGED' OR purged_at IS NOT NULL)
 );

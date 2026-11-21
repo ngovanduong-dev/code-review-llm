@@ -42,7 +42,7 @@ from code_review_llm.domain import (
 def _seed_report(now: datetime) -> tuple[ReviewRequest, CodeSnapshot, ReviewReport]:
     req = ReviewRequest(
         repo_full_name="org/demo",
-        execution_mode=ExecutionMode.D_KET_HOP,
+        execution_mode=ExecutionMode.D_HYBRID,
         context_policy=ContextPolicy.DIFF_AST_INTENT,
         llm_model_name="gemini-2.5-flash",
         prompt_code="PY_HYBRID_AST",
@@ -67,8 +67,8 @@ def _seed_report(now: datetime) -> tuple[ReviewRequest, CodeSnapshot, ReviewRepo
             ChangedFile(
                 old_path="app/db.py",
                 new_path="app/db.py",
-                change_type=ChangeType.CHINH_SUA,
-                patch_status=PatchStatus.CO_PATCH,
+                change_type=ChangeType.MODIFIED,
+                patch_status=PatchStatus.HAS_PATCH,
                 old_line_count=20,
                 new_line_count=24,
                 additions_count=6,
@@ -90,8 +90,8 @@ def _seed_report(now: datetime) -> tuple[ReviewRequest, CodeSnapshot, ReviewRepo
             ChangedFile(
                 old_path=None,
                 new_path="assets/logo.png",
-                change_type=ChangeType.THEM_MOI,
-                patch_status=PatchStatus.NHI_PHAN,
+                change_type=ChangeType.ADDED,
+                patch_status=PatchStatus.BINARY,
                 language="Binary",
                 is_supported=False,
             ),
@@ -102,9 +102,9 @@ def _seed_report(now: datetime) -> tuple[ReviewRequest, CodeSnapshot, ReviewRepo
             dimension_name=cat,
             rubric_version="rubric-v1",
             assessment_status=(
-                AssessmentStatus.CO_VAN_DE
-                if cat == Category.BAO_MAT
-                else AssessmentStatus.KHONG_QUAN_SAT_THAY
+                AssessmentStatus.ISSUES_FOUND
+                if cat == Category.SECURITY
+                else AssessmentStatus.NO_ISSUES_OBSERVED
             ),
             is_scope_complete=True,
             summary_rationale="Checked",
@@ -117,10 +117,10 @@ def _seed_report(now: datetime) -> tuple[ReviewRequest, CodeSnapshot, ReviewRepo
         provider_name="gemini",
         resolved_model_name="gemini-2.5-flash",
         payload_hash="p" * 64,
-        call_status=CallStatus.THANH_CONG,
+        call_status=CallStatus.SUCCESS,
         input_tokens=200,
         output_tokens=60,
-        usage_source=UsageSource.THUC_TE,
+        usage_source=UsageSource.ACTUAL,
         estimated_cost_usd=0.0,
         latency_ms=420,
         started_at=now,
@@ -129,12 +129,12 @@ def _seed_report(now: datetime) -> tuple[ReviewRequest, CodeSnapshot, ReviewRepo
     )
     inv_fail = ModelInvocationRecord(
         attempt_number=2,
-        call_purpose=CallPurpose.XAC_MINH,
+        call_purpose=CallPurpose.VERIFY,
         provider_name="groq",
         resolved_model_name="qwen3",
         payload_hash="q" * 64,
-        call_status=CallStatus.QUA_HAN,
-        usage_source=UsageSource.KHONG_CO,
+        call_status=CallStatus.TIMEOUT,
+        usage_source=UsageSource.NONE,
         latency_ms=3000,
         started_at=now,
         finished_at=now + timedelta(seconds=3),
@@ -146,15 +146,15 @@ def _seed_report(now: datetime) -> tuple[ReviewRequest, CodeSnapshot, ReviewRepo
         start_line=12,
         end_line=13,
         hunk_index=1,
-        category=Category.BAO_MAT,
-        finding_kind=FindingKind.LOI_TIEM_AN,
-        severity=Severity.CAO,
-        evidence_status=EvidenceStatus.CO_CAN_CU,
+        category=Category.SECURITY,
+        finding_kind=FindingKind.DEFECT,
+        severity=Severity.HIGH,
+        evidence_status=EvidenceStatus.GROUNDED,
         title="SQL injection via f-string",
         explanation="User input interpolated into SQL query",
         code_evidence="cur.execute(f'SELECT * FROM u WHERE id={uid}')",
         suggested_fix="cur.execute('SELECT * FROM u WHERE id=?', (uid,))",
-        fix_verification_status=FixVerificationStatus.CHUA_KIEM_CHUNG,
+        fix_verification_status=FixVerificationStatus.UNVERIFIED,
         sources=[SourceType.BANDIT, SourceType.LLM],
     )
     cands = [
@@ -164,12 +164,12 @@ def _seed_report(now: datetime) -> tuple[ReviewRequest, CodeSnapshot, ReviewRepo
             diff_side=DiffSide.RIGHT,
             start_line=12,
             end_line=13,
-            category=Category.BAO_MAT,
-            severity=Severity.CAO,
+            category=Category.SECURITY,
+            severity=Severity.HIGH,
             title="hardcoded_sql_expressions",
             raw_message="B608",
             rule_code="B608",
-            filter_status=FilterStatus.GIU_LAI,
+            filter_status=FilterStatus.KEPT,
             merged_fingerprint="fp-sqli-1",
         ),
         FindingCandidate(
@@ -178,12 +178,12 @@ def _seed_report(now: datetime) -> tuple[ReviewRequest, CodeSnapshot, ReviewRepo
             diff_side=DiffSide.RIGHT,
             start_line=12,
             end_line=13,
-            category=Category.BAO_MAT,
-            severity=Severity.CAO,
+            category=Category.SECURITY,
+            severity=Severity.HIGH,
             title="SQL injection",
             raw_message="SQLi",
             invocation_attempt=1,
-            filter_status=FilterStatus.GIU_LAI,
+            filter_status=FilterStatus.KEPT,
             merged_fingerprint="fp-sqli-1",
         ),
         FindingCandidate(
@@ -192,21 +192,21 @@ def _seed_report(now: datetime) -> tuple[ReviewRequest, CodeSnapshot, ReviewRepo
             diff_side=DiffSide.RIGHT,
             start_line=5,
             end_line=5,
-            category=Category.CHUC_NANG,
-            severity=Severity.TRUNG_BINH,
+            category=Category.FUNCTIONAL,
+            severity=Severity.MEDIUM,
             title="mutable default",
             raw_message="AST01",
             rule_code="AST01",
-            filter_status=FilterStatus.LOI_CU,
+            filter_status=FilterStatus.PRE_EXISTING,
             filter_reason="Present at merge_base",
         ),
     ]
     rep = ReviewReport(
         idempotency_key="idem-42",
         snapshot=snap,
-        execution_mode=ExecutionMode.D_KET_HOP,
+        execution_mode=ExecutionMode.D_HYBRID,
         context_policy=ContextPolicy.DIFF_AST_INTENT,
-        run_status=RunStatus.HOAN_THANH,
+        run_status=RunStatus.COMPLETED,
         is_full_coverage=True,
         findings=[finding],
         candidates=cands,
@@ -236,24 +236,24 @@ def test_full_20_table_persistence_constraints_and_retention(tmp_path: Path) -> 
     store = ReviewStore(conn)
     uid = store.ensure_user("dev1", "Developer One", "dev1@example.com")
     rid = store.ensure_repo("org/demo", platform="GITHUB", repo_url="https://github.com/org/demo")
-    store.grant_role(rid, uid, "QUAN_LY_DU_AN")
-    store.grant_role(rid, uid, "NGUOI_REVIEW")
+    store.grant_role(rid, uid, "PROJECT_MANAGER")
+    store.grant_role(rid, uid, "REVIEWER")
     pid = store.upsert_pull_request(rid, 42, "Fix sql query", "feat/sql", "main", "b" * 40, author_id=uid)
-    ev_id, created_ev = store.record_webhook_event(rid, pid, "deliv-100", "pull_request", "DA_TAO_LUOT")
+    ev_id, created_ev = store.record_webhook_event(rid, pid, "deliv-100", "pull_request", "RUN_CREATED")
     assert created_ev is True
-    ev_id2, created_ev2 = store.record_webhook_event(rid, pid, "deliv-100", "pull_request", "DA_TAO_LUOT")
+    ev_id2, created_ev2 = store.record_webhook_event(rid, pid, "deliv-100", "pull_request", "RUN_CREATED")
     assert ev_id2 == ev_id and created_ev2 is False
 
     pr_tpl = store.ensure_prompt_template(
         "PY_HYBRID_AST", "v1.0", "desc", "sys", "{{diff}}", '{"type":"object"}'
     )
-    r_id = store.ensure_analysis_rule("BANDIT", "B608", "hardcoded_sql_expressions", "BAO_MAT", "CAO")
+    r_id = store.ensure_analysis_rule("BANDIT", "B608", "hardcoded_sql_expressions", "SECURITY", "HIGH")
     cfg_req = ReviewRequest(
         repo_full_name="org/demo",
-        execution_mode=ExecutionMode.D_KET_HOP,
+        execution_mode=ExecutionMode.D_HYBRID,
         llm_model_name="gemini-2.5-flash",
     )
-    cfg_id = store.ensure_review_config(rid, cfg_req, pr_tpl, [(r_id, True, "CAO")])
+    cfg_id = store.ensure_review_config(rid, cfg_req, pr_tpl, [(r_id, True, "HIGH")])
 
     cfg_a_req = ReviewRequest(repo_full_name="org/demo", execution_mode=ExecutionMode.A_STATIC)
     cfg_a_id = store.ensure_review_config(rid, cfg_a_req, None)
@@ -285,28 +285,28 @@ def test_full_20_table_persistence_constraints_and_retention(tmp_path: Path) -> 
 
     fid_db = int(detail["findings"][0]["finding_id"])
     with pytest.raises(ValueError):
-        store.add_feedback(fid_db, uid, FeedbackLabel.SAI, "  ")
-    fb1 = store.add_feedback(fid_db, uid, FeedbackLabel.DUNG)
-    fb2 = store.add_feedback(fid_db, uid, FeedbackLabel.SAI, "Guarded by allowlist")
+        store.add_feedback(fid_db, uid, FeedbackLabel.INVALID, "  ")
+    fb1 = store.add_feedback(fid_db, uid, FeedbackLabel.VALID)
+    fb2 = store.add_feedback(fid_db, uid, FeedbackLabel.INVALID, "Guarded by allowlist")
     assert fb1.revision_no == 1 and fb2.revision_no == 2
 
     pub_sum = store.upsert_publication(
         run_id,
         None,
-        "TONG_HOP_PR",
+        "PR_SUMMARY",
         "dg:sum:42",
         "b" * 40,
-        PublishStatus.CAN_DOI_SOAT,
+        PublishStatus.NEEDS_RECONCILIATION,
         retry_count=1,
         status_detail="timeout",
     )
     pub_sum_upd = store.upsert_publication(
         run_id,
         None,
-        "TONG_HOP_PR",
+        "PR_SUMMARY",
         "dg:sum:42",
         "b" * 40,
-        PublishStatus.DA_DANG,
+        PublishStatus.PUBLISHED,
         external_comment_id="gh-101",
     )
     assert pub_sum == pub_sum_upd
@@ -315,7 +315,7 @@ def test_full_20_table_persistence_constraints_and_retention(tmp_path: Path) -> 
             """INSERT INTO PublicationRecord (
                 run_id, finding_id, comment_scope, marker_key,
                 target_commit_sha, publish_status, retry_count, updated_at
-            ) VALUES (?, NULL, 'TONG_HOP_PR', 'dup', 'b', 'CHO_DANG', 0, ?)""",
+            ) VALUES (?, NULL, 'PR_SUMMARY', 'dup', 'b', 'PENDING', 0, ?)""",
             (run_id, now.isoformat()),
         )
 

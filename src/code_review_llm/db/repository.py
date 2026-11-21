@@ -40,7 +40,7 @@ class ReviewStore:
         username: str,
         full_name: str,
         email: str | None = None,
-        account_type: str = "CA_NHAN",
+        account_type: str = "PERSONAL",
     ) -> int:
         row = self.conn.execute("SELECT user_id FROM UserAccount WHERE username = ?", (username,)).fetchone()
         if row is not None:
@@ -48,7 +48,7 @@ class ReviewStore:
         cur = self.conn.execute(
             """INSERT INTO UserAccount (
                 username, full_name, email, account_type, status, created_at
-            ) VALUES (?, ?, ?, ?, 'HOAT_DONG', ?)""",
+            ) VALUES (?, ?, ?, ?, 'ACTIVE', ?)""",
             (username, full_name, email, account_type, _iso(datetime.now(UTC))),
         )
         self.conn.commit()
@@ -57,7 +57,7 @@ class ReviewStore:
     def ensure_repo(
         self,
         repo_full_name: str,
-        platform: str = "CUC_BO",
+        platform: str = "LOCAL",
         repo_url: str | None = None,
         default_branch: str = "main",
         primary_language: str = "Python",
@@ -72,7 +72,7 @@ class ReviewStore:
             """INSERT INTO Repository (
                 repo_full_name, platform, repo_url, default_branch,
                 primary_language, status, created_at
-            ) VALUES (?, ?, ?, ?, ?, 'DANG_HOAT_DONG', ?)""",
+            ) VALUES (?, ?, ?, ?, ?, 'ACTIVE', ?)""",
             (
                 repo_full_name,
                 platform,
@@ -102,7 +102,7 @@ class ReviewStore:
         source_branch: str,
         target_branch: str,
         current_head_sha: str,
-        pr_status: str = "DANG_MO",
+        pr_status: str = "OPEN",
         description: str | None = None,
         author_id: int | None = None,
     ) -> int:
@@ -434,7 +434,7 @@ class ReviewStore:
                 execution_mode, context_policy, run_status, is_full_coverage,
                 termination_reason, benchmark_sample_id, benchmark_manifest_hash,
                 created_at, retention_expires_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, 'CHO_XU_LY', 1, NULL, ?, ?, ?, ?)""",
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, 'PENDING', 1, NULL, ?, ?, ?, ?)""",
             (
                 snapshot_id,
                 config_id,
@@ -600,8 +600,8 @@ class ReviewStore:
         feedback_label: FeedbackLabel,
         reason_note: str | None = None,
     ) -> FindingFeedback:
-        if feedback_label == FeedbackLabel.SAI and (not reason_note or not reason_note.strip()):
-            raise ValueError("reason_note is required when feedback_label is SAI")
+        if feedback_label == FeedbackLabel.INVALID and (not reason_note or not reason_note.strip()):
+            raise ValueError("reason_note is required when feedback_label is INVALID")
         row = self.conn.execute(
             "SELECT COALESCE(MAX(revision_no), 0) AS mr "
             "FROM FindingFeedback WHERE finding_id=? AND user_id=?",
@@ -701,7 +701,7 @@ class ReviewStore:
             """INSERT INTO StorageArtifact (
                 snapshot_id, run_id, artifact_type, storage_uri, content_sha256,
                 size_bytes, purge_status, expires_at, purged_at, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, 'CON_LUU', ?, NULL, ?)""",
+            ) VALUES (?, ?, ?, ?, ?, ?, 'STORED', ?, NULL, ?)""",
             (
                 snapshot_id,
                 run_id,
@@ -726,7 +726,7 @@ class ReviewStore:
         rows = self.conn.execute(
             """SELECT artifact_id, snapshot_id, artifact_type, storage_uri
                FROM StorageArtifact
-               WHERE purge_status IN ('CON_LUU', 'LOI_XOA') AND expires_at <= ?""",
+               WHERE purge_status IN ('STORED', 'DELETE_FAILED') AND expires_at <= ?""",
             (now_s,),
         ).fetchall()
         purged = 0
@@ -741,7 +741,7 @@ class ReviewStore:
                 deleted = False
             if deleted:
                 self.conn.execute(
-                    "UPDATE StorageArtifact SET purge_status='DA_XOA', purged_at=? WHERE artifact_id=?",
+                    "UPDATE StorageArtifact SET purge_status='PURGED', purged_at=? WHERE artifact_id=?",
                     (now_s, aid),
                 )
                 purged += 1
@@ -749,7 +749,7 @@ class ReviewStore:
                     purged_snapshots.add(int(row["snapshot_id"]))
             else:
                 self.conn.execute(
-                    "UPDATE StorageArtifact SET purge_status='LOI_XOA' WHERE artifact_id=?",
+                    "UPDATE StorageArtifact SET purge_status='DELETE_FAILED' WHERE artifact_id=?",
                     (aid,),
                 )
                 failed += 1
@@ -761,7 +761,7 @@ class ReviewStore:
             )
         self.conn.execute(
             """DELETE FROM StorageArtifact
-               WHERE purge_status='DA_XOA'
+               WHERE purge_status='PURGED'
                  AND run_id IN (SELECT run_id FROM ReviewRun WHERE retention_expires_at <= ?)""",
             (now_s,),
         )
@@ -770,7 +770,7 @@ class ReviewStore:
                WHERE retention_expires_at <= ?
                  AND NOT EXISTS (
                      SELECT 1 FROM StorageArtifact sa
-                     WHERE sa.run_id = ReviewRun.run_id AND sa.purge_status <> 'DA_XOA'
+                     WHERE sa.run_id = ReviewRun.run_id AND sa.purge_status <> 'PURGED'
                  )""",
             (now_s,),
         ).rowcount

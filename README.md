@@ -8,7 +8,7 @@ Automated Python pull request review tool combining differential static analysis
 - **Bounded AST context packaging:** Extracts enclosing functions, classes, imports, callee signatures, and PR intent within strict token budgets.
 - **Deterministic AST grounding gate:** Verifies reported file paths, `LEFT`/`RIGHT` diff coordinates, AST symbol names, and verbatim code evidence before persisting findings.
 - **Multi-format reporting & safe GitHub integration:** Outputs JSON, Markdown, and SARIF 2.1.0; enforces `head_sha` stale checks and marker-based idempotent comment publishing.
-- **Reproducible evaluation harness:** Supports controlled ablation across four modes (`A_STATIC`, `B_LLM`, `C_NOI_KET_QUA`, `D_KET_HOP`) with 1-to-1 Hungarian matching and PR-clustered bootstrap confidence intervals.
+- **Reproducible evaluation harness:** Supports controlled ablation across four modes (`A_STATIC`, `B_LLM`, `C_CONCAT`, `D_HYBRID`) with 1-to-1 Hungarian matching and PR-clustered bootstrap confidence intervals.
 
 ## Quickstart
 

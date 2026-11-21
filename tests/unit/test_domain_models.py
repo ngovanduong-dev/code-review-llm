@@ -47,12 +47,12 @@ def test_extra_fields_forbidden() -> None:
 
 
 def test_changed_file_path_rules() -> None:
-    f_add = ChangedFile(old_path=None, new_path="a.py", change_type=ChangeType.THEM_MOI)
+    f_add = ChangedFile(old_path=None, new_path="a.py", change_type=ChangeType.ADDED)
     assert f_add.display_path == "a.py"
     with pytest.raises(ValidationError):
-        ChangedFile(old_path="old.py", new_path="a.py", change_type=ChangeType.THEM_MOI)
+        ChangedFile(old_path="old.py", new_path="a.py", change_type=ChangeType.ADDED)
     with pytest.raises(ValidationError):
-        ChangedFile(old_path="old.py", new_path="a.py", change_type=ChangeType.XOA)
+        ChangedFile(old_path="old.py", new_path="a.py", change_type=ChangeType.DELETED)
 
 
 def test_finding_line_bounds_and_roundtrip() -> None:
@@ -63,10 +63,10 @@ def test_finding_line_bounds_and_roundtrip() -> None:
             diff_side=DiffSide.RIGHT,
             start_line=10,
             end_line=8,
-            category=Category.CHUC_NANG,
-            finding_kind=FindingKind.LOI_TIEM_AN,
-            severity=Severity.CAO,
-            evidence_status=EvidenceStatus.CO_CAN_CU,
+            category=Category.FUNCTIONAL,
+            finding_kind=FindingKind.DEFECT,
+            severity=Severity.HIGH,
+            evidence_status=EvidenceStatus.GROUNDED,
             title="t",
             explanation="e",
             code_evidence="x = 1",
@@ -78,10 +78,10 @@ def test_finding_line_bounds_and_roundtrip() -> None:
         diff_side=DiffSide.RIGHT,
         start_line=8,
         end_line=10,
-        category=Category.CHUC_NANG,
-        finding_kind=FindingKind.LOI_TIEM_AN,
-        severity=Severity.CAO,
-        evidence_status=EvidenceStatus.CO_CAN_CU,
+        category=Category.FUNCTIONAL,
+        finding_kind=FindingKind.DEFECT,
+        severity=Severity.HIGH,
+        evidence_status=EvidenceStatus.GROUNDED,
         title="t",
         explanation="e",
         code_evidence="x = 1",
@@ -100,8 +100,8 @@ def test_candidate_source_xor_constraint() -> None:
             diff_side=DiffSide.RIGHT,
             start_line=1,
             end_line=2,
-            category=Category.BAO_MAT,
-            severity=Severity.CAO,
+            category=Category.SECURITY,
+            severity=Severity.HIGH,
             title="t",
             raw_message="m",
             rule_code="B608",
@@ -113,8 +113,8 @@ def test_candidate_source_xor_constraint() -> None:
         diff_side=DiffSide.RIGHT,
         start_line=1,
         end_line=2,
-        category=Category.CHUC_NANG,
-        severity=Severity.TRUNG_BINH,
+        category=Category.FUNCTIONAL,
+        severity=Severity.MEDIUM,
         title="mutable default",
         raw_message="B006",
         rule_code="B006",
@@ -130,10 +130,10 @@ def test_usage_null_consistency() -> None:
             provider_name="gemini",
             resolved_model_name="gemini-2.5-flash",
             payload_hash="h",
-            call_status=CallStatus.THANH_CONG,
+            call_status=CallStatus.SUCCESS,
             input_tokens=100,
             output_tokens=None,
-            usage_source=UsageSource.KHONG_CO,
+            usage_source=UsageSource.NONE,
             started_at=now,
         )
     rec = ModelInvocationRecord(
@@ -141,8 +141,8 @@ def test_usage_null_consistency() -> None:
         provider_name="gemini",
         resolved_model_name="gemini-2.5-flash",
         payload_hash="h",
-        call_status=CallStatus.QUA_HAN,
-        usage_source=UsageSource.KHONG_CO,
+        call_status=CallStatus.TIMEOUT,
+        usage_source=UsageSource.NONE,
         started_at=now,
     )
     assert rec.input_tokens is None
@@ -155,7 +155,7 @@ def test_feedback_sai_requires_reason() -> None:
             finding_id=1,
             user_id=1,
             revision_no=1,
-            feedback_label=FeedbackLabel.SAI,
+            feedback_label=FeedbackLabel.INVALID,
             reason_note="   ",
             created_at=now,
         )
@@ -163,8 +163,8 @@ def test_feedback_sai_requires_reason() -> None:
         finding_id=1,
         user_id=1,
         revision_no=1,
-        feedback_label=FeedbackLabel.SAI,
+        feedback_label=FeedbackLabel.INVALID,
         reason_note="Guarded above",
         created_at=now,
     )
-    assert fb.feedback_label == FeedbackLabel.SAI
+    assert fb.feedback_label == FeedbackLabel.INVALID
