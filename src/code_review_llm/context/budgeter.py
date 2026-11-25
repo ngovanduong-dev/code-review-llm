@@ -46,15 +46,14 @@ def pack_context_budget(
     prompt_overhead_tokens: int = 500,
 ) -> ContextBundle:
     indexes: dict[str, FileAstIndex] = {}
-    for pf in parsed_files:
-        if pf.new_path and pf.new_path in head_contents and pf.new_path.endswith((".py", ".pyi")):
-            src = head_contents[pf.new_path]
-            indexes[pf.display_path] = extract_ast_index(src, pf.display_path)
+    for path, src in head_contents.items():
+        if path.endswith((".py", ".pyi")):
+            indexes[path] = extract_ast_index(src, path)
     for pf in parsed_files:
         if pf.display_path not in indexes:
-            src = base_contents.get(pf.old_path or "")
-            if src:
-                indexes[pf.display_path] = extract_ast_index(src, pf.display_path)
+            base_src = base_contents.get(pf.old_path or "")
+            if base_src:
+                indexes[pf.display_path] = extract_ast_index(base_src, pf.display_path)
 
     pr_intent: str | None = None
     intent_tokens = 0
