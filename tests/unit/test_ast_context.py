@@ -3,6 +3,36 @@ from code_review_llm.domain import ContextPolicy, ReviewPolicy
 from code_review_llm.ingest import ingest_snapshot_pair
 
 
+def test_ast_context_enclosing_and_cross_callee_and_circular_imports() -> None:
+    base_a = "from b import helper\n\ndef compute(x):\n    return helper(x)\n"
+    head_a = "from b import helper\n\ndef compute(x):\n    return helper(x + 1)\n"
+    head_b = "from a import compute\n\ndef helper(val: int) -> int:\n    return val * 2\n"
+
+    ing = ingest_snapshot_pair(
+        "org/demo",
+        base_files={"a.py": base_a, "b.py": head_b},
+        head_files={"a.py": head_a, "b.py": head_b},
+        pr_title="Fix offset",
+        pr_description="Increment input before helper call",
+    )
+    bundle = pack_context_budget(
+        ing.parsed_files,
+        ing.base_contents,
+        ing.head_contents,
+        ContextPolicy.DIFF_AST_INTENT,
+        ReviewPolicy(max_input_tokens=4000),
+        pr_title=ing.snapshot.pr_title,
+        pr_description=ing.snapshot.pr_description,
+    )
+    assert bundle.is_full_coverage is True
+    assert bundle.pr_intent_text is not None and "Fix offset" in bundle.pr_intent_text
+    assert len(bundle.chunks) == 1
+    ch = bundle.chunks[0]
+    assert ch.ast_symbol_name == "compute"
+    assert ch.ast_context_text is not None
+    assert "def helper(val: int) -> int:" in ch.ast_context_text
+
+
 def test_ast_context_enclosing_callee_and_pr_intent() -> None:
     base_a = "def helper(val: int) -> int:\n    return val * 2\n\ndef compute(x):\n    return helper(x)\n"
     head_a = "def helper(val: int) -> int:\n    return val * 2\n\ndef compute(x):\n    return helper(x + 1)\n"
