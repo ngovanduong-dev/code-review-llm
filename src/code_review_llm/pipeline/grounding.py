@@ -337,6 +337,10 @@ class DeterministicGroundingGate:
                             )
                         )
                         continue
+            elif not cand.code_evidence.strip() and lines:
+                snippet = "\n".join(lines[cand.start_line - 1 : cand.end_line]).strip()[:300]
+                if snippet:
+                    cand = cand.model_copy(update={"code_evidence": snippet})
 
             result.kept.append(
                 CandidateEnvelope(
