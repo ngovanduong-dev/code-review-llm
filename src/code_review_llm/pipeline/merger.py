@@ -91,7 +91,7 @@ _RULE_FAMILIES = {
     "BLE001": "broad_except",
     "S110": "broad_except",
     "S112": "broad_except",
-    "TRY_PASS": "broad_except",
+    "TRY_EXCEPT_SILENT": "broad_except",
     "B006": "mutable_default",
     "MUTABLE_DEFAULT": "mutable_default",
     "SIM115": "resource_leak",
@@ -271,7 +271,11 @@ class SemanticMerger:
                     explanation=explanation,
                     code_evidence=code_evidence or pc.raw_message[:200],
                     suggested_fix=suggested_fix,
-                    fix_verification_status=FixVerificationStatus.UNVERIFIED,
+                    fix_verification_status=(
+                        FixVerificationStatus.UNVERIFIED
+                        if suggested_fix
+                        else FixVerificationStatus.NOT_APPLICABLE
+                    ),
                     sources=sources,
                 )
             )

@@ -30,6 +30,13 @@ def _sha256_json(payload: Any) -> str:
     return hashlib.sha256(raw).hexdigest()
 
 
+def _last_id(cur: sqlite3.Cursor) -> int:
+    rowid = cur.lastrowid
+    if rowid is None:
+        raise RuntimeError("Missing SQLite lastrowid after insert")
+    return int(rowid)
+
+
 class ReviewStore:
     def __init__(self, conn: sqlite3.Connection) -> None:
         self.conn = conn
@@ -52,7 +59,7 @@ class ReviewStore:
             (username, full_name, email, account_type, _iso(datetime.now(UTC))),
         )
         self.conn.commit()
-        return int(cur.lastrowid)
+        return _last_id(cur)
 
     def ensure_repo(
         self,
@@ -83,7 +90,7 @@ class ReviewStore:
             ),
         )
         self.conn.commit()
-        return int(cur.lastrowid)
+        return _last_id(cur)
 
     def grant_role(self, repo_id: int, user_id: int, role_name: str) -> None:
         self.conn.execute(
@@ -150,7 +157,7 @@ class ReviewStore:
             ),
         )
         self.conn.commit()
-        return int(cur.lastrowid)
+        return _last_id(cur)
 
     def record_webhook_event(
         self,
@@ -183,7 +190,7 @@ class ReviewStore:
             ),
         )
         self.conn.commit()
-        return int(cur.lastrowid), True
+        return _last_id(cur), True
 
     def ensure_prompt_template(
         self,
@@ -221,7 +228,7 @@ class ReviewStore:
             ),
         )
         self.conn.commit()
-        return int(cur.lastrowid)
+        return _last_id(cur)
 
     def ensure_analysis_rule(
         self,
@@ -255,7 +262,7 @@ class ReviewStore:
             ),
         )
         self.conn.commit()
-        return int(cur.lastrowid)
+        return _last_id(cur)
 
     def ensure_review_config(
         self,
@@ -304,7 +311,7 @@ class ReviewStore:
                 _iso(datetime.now(UTC)),
             ),
         )
-        config_id = int(cur.lastrowid)
+        config_id = _last_id(cur)
         for rule_id, is_enabled, sev_override in rule_overrides or []:
             self.conn.execute(
                 """INSERT INTO ConfigRule (
@@ -328,7 +335,35 @@ class ReviewStore:
         ).fetchone()
         if existing is not None:
             sid = int(existing["snapshot_id"])
-            return sid, *self._load_snapshot_maps(sid)
+            existing_file_map, existing_hunk_map = self._load_snapshot_maps(sid)
+            updated_hunk = False
+            for cf in snapshot.files:
+                fid_opt = existing_file_map.get(cf.display_path)
+                if fid_opt is None:
+                    continue
+                for hk in cf.hunks:
+                    if hk.ast_context_snippet is not None:
+                        res = self.conn.execute(
+                            """UPDATE DiffHunk
+                               SET ast_symbol_name=COALESCE(?, ast_symbol_name),
+                                   ast_context_snippet=?,
+                                   estimated_tokens=?
+                               WHERE file_id=? AND hunk_index=?
+                                 AND patch_content IS NOT NULL
+                                 AND ast_context_snippet IS NULL""",
+                            (
+                                hk.ast_symbol_name,
+                                hk.ast_context_snippet,
+                                hk.estimated_tokens,
+                                fid_opt,
+                                hk.hunk_index,
+                            ),
+                        )
+                        if res.rowcount > 0:
+                            updated_hunk = True
+            if updated_hunk:
+                self.conn.commit()
+            return sid, existing_file_map, existing_hunk_map
         cur = self.conn.execute(
             """INSERT INTO CodeSnapshot (
                 repo_id, pr_id, input_source, base_commit_sha, head_commit_sha,
@@ -348,7 +383,7 @@ class ReviewStore:
                 _iso(datetime.now(UTC)),
             ),
         )
-        sid = int(cur.lastrowid)
+        sid = _last_id(cur)
         file_map: dict[str, int] = {}
         hunk_map: dict[tuple[str, int], int] = {}
         for cf in snapshot.files:
@@ -371,7 +406,7 @@ class ReviewStore:
                     int(cf.is_supported),
                 ),
             )
-            fid = int(fcur.lastrowid)
+            fid = _last_id(fcur)
             file_map[cf.display_path] = fid
             for hk in cf.hunks:
                 hcur = self.conn.execute(
@@ -392,7 +427,7 @@ class ReviewStore:
                         hk.estimated_tokens,
                     ),
                 )
-                hunk_map[(cf.display_path, hk.hunk_index)] = int(hcur.lastrowid)
+                hunk_map[(cf.display_path, hk.hunk_index)] = _last_id(hcur)
         self.conn.commit()
         return sid, file_map, hunk_map
 
@@ -450,7 +485,7 @@ class ReviewStore:
             ),
         )
         self.conn.commit()
-        return int(cur.lastrowid), True
+        return _last_id(cur), True
 
     def persist_report(
         self,
@@ -507,7 +542,7 @@ class ReviewStore:
                     _iso(inv.finished_at),
                 ),
             )
-            inv_map[inv.attempt_number] = int(cur.lastrowid)
+            inv_map[inv.attempt_number] = _last_id(cur)
 
         for qa in report.quality_assessments:
             self.conn.execute(
@@ -556,7 +591,7 @@ class ReviewStore:
                     fnd.fix_verification_status.value,
                 ),
             )
-            finding_map[fnd.issue_fingerprint] = int(cur.lastrowid)
+            finding_map[fnd.issue_fingerprint] = _last_id(cur)
 
         for cand in report.candidates:
             fid = file_map[cand.file_path]
@@ -685,7 +720,7 @@ class ReviewStore:
             ),
         )
         self.conn.commit()
-        return int(cur.lastrowid)
+        return _last_id(cur)
 
     def register_artifact(
         self,
@@ -714,7 +749,7 @@ class ReviewStore:
             ),
         )
         self.conn.commit()
-        return int(cur.lastrowid)
+        return _last_id(cur)
 
     def purge_expired_artifacts(
         self,
